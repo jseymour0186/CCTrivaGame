@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CC Trivia</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen">
+  <div id="app"></div>
+
+  <script>
+    const CATEGORIES = [
+      { name: 'History', color: 'bg-orange-500', textColor: 'text-orange-500' },
+      { name: 'Geography', color: 'bg-green-500', textColor: 'text-green-500' },
+      { name: 'Science', color: 'bg-purple-500', textColor: 'text-purple-500' },
+      { name: 'English Grammar', color: 'bg-red-500', textColor: 'text-red-500' },
+      { name: 'Timeline', color: 'bg-yellow-500', textColor: 'text-yellow-500' },
+      { name: 'Math', color: 'bg-blue-500', textColor: 'text-blue-500' },
+      { name: 'Latin', color: 'bg-pink-500', textColor: 'text-pink-500' }
+    ];
+
+    const CYCLES = ['Cycle 1', 'Cycle 2', 'Cycle 3'];
+
+    let state = {
+      screen: 'home',
+      selectedCycle: 'Cycle 1',
+      questions: {},
+      players: [],
+      currentPlayerIndex: 0,
+      currentQuestion: null,
+      selectedAnswer: null,
+      showResult: false,
+      winner: null,
+      isAdmin: false,
+      playerCount: null,
+      playerNames: [],
+      adminCycle: 'Cycle 1',
+      adminCategory: 'History',
+      newQuestion: { question: '', correct: '', wrong1: '', wrong2: '', wrong3: '' },
+      editingIndex: null,
+      showQuestionList: false,
+      generatingSuggestions: false,
+      needsFinalQuestion: false,
+      finalQuestionPlayer: null
+    };
+
+    // Initialize
+    async function init() {
+      await loadQuestions();
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('admin') === 'true' || !window.location.hostname || window.location.hostname === 'localhost') {
+        state.isAdmin = true;
+      }
+      render();
+    }
+
+    async function loadQuestions() {
+      try {
+        const result = await window.storage.get('cc-questions', true);
+        if (result) {
+          state.questions = JSON.parse(result.value);
+        }
+      } catch (error) {
+        console.log('No saved questions yet');
+      }
+    }
+
+    async function saveQuestions(newQuestions) {
+      try {
+        await window.storage.set('cc-questions', JSON.stringify(newQuestions), true);
+        state.questions = newQuestions;
+      } catch (error) {
+        console.error('Error saving questions:', error);
+      }
+    }
+
+    function render() {
+      const app = document.getElementById('app');
+      
+      // Check for winner first
+      if (state.winner) {
+        app.innerHTML = renderWinner();
+      } else if (state.screen === 'home') {
+        app.innerHTML = renderHome();
+      } else if (state.screen === 'names') {
+        app.innerHTML = renderNames();
+      } else if (state.screen === 'admin') {
+        app.innerHTML = renderAdmin();
+      } else if (state.screen === 'selectFinalCategory') {
+        app.innerHTML = renderSelectFinalCategory();
+      } else if (state.screen === 'game') {
+        app.innerHTML = renderGame();
+      }
+    }
+
+    function renderHome() {
+      return `
+        <div class="max-w-4xl mx-auto p-8">
+          <h1 class="text-5xl font-bold text-center mb-12 text-purple-900">CC Trivia</h1>
+
+          <div class="bg-white rounded-lg shadow-xl p-8 mb-8">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800">Select Cycle</h3>
+            <div class="grid grid-cols-3 gap-4 mb-8">
+              ${CYCLES.map(cycle => `
+                <button onclick="selectCycle('${cycle}')" class="py-4 px-6 rounded-lg font-semibold text-lg transition ${
+                  state.selectedCycle === cycle ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }">
+                  ${cycle}
+                </button>
+              `).join('')}
+            </div>
+
+            <h3 class="text-2xl font-bold mb-4 text-gray-800">Number of Players</h3>
+            <div class="grid grid-cols-5 gap-4">
+              ${[2, 3, 4, 5, 6].map(count => `
+                <button onclick="setupPlayers(${count})" class="py-4 px-6 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-lg transition">
+                  ${count}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <button onclick="goToAdmin()" class="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-lg transition mb-4">
+            ⚙️ Manage Questions
+          </button>
+
+          <button onclick="toggleAdmin()" class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold text-sm transition">
+            ${state.isAdmin ? '🔓 Admin Mode: ON' : '🔒 Admin Mode: OFF'} (Click to Toggle)
+          </button>
+
+          ${!state.isAdmin ? `
+            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p class="text-sm text-blue-800 text-center">
+                <strong>For Published Version:</strong> Add <code class="bg-blue-100 px-2 py-1 rounded">?admin=true</code> to the URL
+              </p>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    function renderNames() {
+      return `
+        <div class="max-w-2xl mx-auto p-8">
+          <h1 class="text-4xl font-bold text-center mb-8 text-purple-900">Enter Player Names</h1>
+
+          <div class="bg-white rounded-lg shadow-xl p-8">
+            <div class="space-y-4 mb-8">
+              ${state.playerNames.map((name, index) => `
+                <div>
+                  <label class="block text-sm font-semibold text-gray-700 mb-2">Player ${index + 1}</label>
+                  <input 
+                    type="text" 
+                    value="${name}" 
+                    onchange="updatePlayerName(${index}, this.value)"
+                    placeholder="Player ${index + 1}"
+                    class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 text-lg"
+                  />
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="flex gap-4">
+              <button onclick="goHome()" class="flex-1 py-4 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-lg transition">
+                Back
+              </button>
+              <button onclick="startGame()" class="flex-1 py-4 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-semibold text-lg transition">
+                Start Game
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAdmin() {
+      if (!state.isAdmin) {
+        return `
+          <div class="min-h-screen flex items-center justify-center p-8">
+            <div class="bg-white rounded-lg shadow-xl p-12 text-center max-w-md">
+              <h1 class="text-3xl font-bold mb-4 text-gray-800">Access Denied</h1>
+              <p class="text-gray-600 mb-6">Admin access is required to manage questions.</p>
+              <p class="text-sm text-gray-500 mb-6">
+                Add <code class="bg-gray-100 px-2 py-1 rounded">?admin=true</code> to the URL to access this page.
+              </p>
+              <button onclick="goHome()" class="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition">
+                Back to Home
+              </button>
+            </div>
+          </div>
+        `;
+      }
+
+      const currentQuestions = state.questions[state.adminCycle]?.[state.adminCategory] || [];
+      
+      return `
+        <div class="max-w-4xl mx-auto p-8">
+          <div class="flex justify-between items-center mb-8 flex-wrap gap-4">
+            <h1 class="text-4xl font-bold text-gray-800">Manage Questions</h1>
+            <div class="flex gap-3 flex-wrap">
+              <button onclick="exportQuestions()" class="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition">
+                📥 Export
+              </button>
+              <label class="px-6 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-semibold transition cursor-pointer">
+                📤 Import
+                <input type="file" accept=".json" onchange="importQuestions(event)" class="hidden" />
+              </label>
+              <button onclick="goHome()" class="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold transition">
+                Back
+              </button>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-xl p-8">
+            <div class="grid grid-cols-2 gap-6 mb-6">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Cycle</label>
+                <select onchange="changeAdminCycle(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                  ${CYCLES.map(cycle => `<option value="${cycle}" ${state.adminCycle === cycle ? 'selected' : ''}>${cycle}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                <select onchange="changeAdminCategory(this.value)" class="w-full px-4 py-2 border border-gray-300 rounded-lg">
+                  ${CATEGORIES.map(cat => `<option value="${cat.name}" ${state.adminCategory === cat.name ? 'selected' : ''}>${cat.name}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+
+            <div class="mb-4">
+              <label class="block text-sm font-semibold text-gray-700 mb-2">Question</label>
+              <textarea 
+                id="question-field"
+                oninput="updateNewQuestion('question', this.value)"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                rows="3"
+                placeholder="Enter the question..."
+              >${state.newQuestion.question}</textarea>
+            </div>
+
+            <div class="mb-4">
+              <label class="block text-sm font-semibold text-green-700 mb-2">Correct Answer</label>
+              <textarea 
+                id="correct-field"
+                oninput="updateNewQuestion('correct', this.value)"
+                class="w-full px-4 py-2 border border-green-300 rounded-lg"
+                rows="3"
+                placeholder="Enter correct answer..."
+              >${state.newQuestion.correct}</textarea>
+            </div>
+
+            <div class="mb-6">
+              <button 
+                id="generate-btn"
+                onclick="generateWrongAnswers()" 
+                class="w-full py-3 rounded-lg font-semibold transition bg-purple-500 hover:bg-purple-600 text-white">
+                ${state.generatingSuggestions ? 'Generating...' : '✨ Generate Wrong Answer Suggestions'}
+              </button>
+              <p class="text-xs text-gray-500 mt-2 text-center">AI will suggest 3 plausible wrong answers</p>
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 mb-6">
+              ${['wrong1', 'wrong2', 'wrong3'].map((field, i) => `
+                <div>
+                  <label class="block text-sm font-semibold text-red-700 mb-2">Wrong Answer ${i + 1}</label>
+                  <input 
+                    type="text"
+                    id="${field}-field" 
+                    value="${state.newQuestion[field]}"
+                    oninput="updateNewQuestion('${field}', this.value)"
+                    class="w-full px-4 py-2 border border-red-300 rounded-lg"
+                    placeholder="Enter wrong answer..."
+                  />
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="flex gap-4">
+              <button onclick="addQuestion()" class="flex-1 py-4 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-lg transition">
+                ${state.editingIndex !== null ? 'Update Question' : 'Add Question'}
+              </button>
+              ${state.editingIndex !== null ? `
+                <button onclick="cancelEdit()" class="px-6 py-4 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold text-lg transition">
+                  Cancel
+                </button>
+              ` : ''}
+            </div>
+
+            <div class="mt-8 pt-8 border-t border-gray-200">
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800">
+                  Questions for ${state.adminCycle} - ${state.adminCategory}
+                </h3>
+                <button onclick="toggleQuestionList()" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold transition">
+                  ${state.showQuestionList ? 'Hide' : 'View'} Questions
+                </button>
+              </div>
+              <div class="text-sm text-gray-600 mb-4">
+                ${currentQuestions.length} questions added
+              </div>
+
+              ${state.showQuestionList && currentQuestions.length > 0 ? `
+                <div class="space-y-4 mt-4">
+                  ${currentQuestions.map((q, index) => `
+                    <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                      <div class="font-semibold text-gray-800 mb-2">${q.question}</div>
+                      <div class="text-sm space-y-1 mb-3">
+                        ${q.answers.map(answer => `
+                          <div class="${answer.correct ? 'text-green-600 font-semibold' : 'text-gray-600'}">
+                            ${answer.correct ? '✓' : '✗'} ${answer.text}
+                          </div>
+                        `).join('')}
+                      </div>
+                      <div class="flex gap-2">
+                        <button onclick="editQuestion(${index})" class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded font-semibold text-sm transition">
+                          Edit
+                        </button>
+                        <button onclick="deleteQuestion(${index})" class="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded font-semibold text-sm transition">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderSelectFinalCategory() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-8">
+          <div class="bg-white rounded-lg shadow-2xl p-12 text-center max-w-2xl">
+            <div class="text-6xl mb-6">🏆</div>
+            <h1 class="text-4xl font-bold mb-4 text-gray-800">${state.finalQuestionPlayer.name} has all 7 wedges!</h1>
+            <p class="text-xl text-gray-600 mb-8">Select a category for the final question:</p>
+            
+            <div class="grid grid-cols-2 gap-4">
+              ${CATEGORIES.map(cat => `
+                <button 
+                  onclick="selectFinalCategory('${cat.name}')"
+                  class="${cat.color} hover:opacity-80 text-white rounded-lg py-6 px-4 font-bold text-lg transition shadow-lg"
+                >
+                  ${cat.name}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderGame() {
+      if (!state.currentQuestion) return '';
+      
+      const currentPlayer = state.players[state.currentPlayerIndex];
+      const categoryColor = CATEGORIES.find(c => c.name === state.currentQuestion.category)?.color || 'bg-gray-500';
+
+      return `
+        <div class="max-w-4xl mx-auto p-4 md:p-8">
+          <div class="bg-white rounded-lg shadow-xl p-6 mb-6">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-2xl font-bold text-gray-800">
+                ${currentPlayer.name}'s Turn
+                ${state.currentQuestion?.isFinalQuestion ? ' 🏆' : ''}
+              </h2>
+              <button onclick="restartGame()" class="px-4 py-2 bg-gray-500 hover:bg-gray-600 text-white rounded-lg font-semibold transition text-sm">
+                End Game
+              </button>
+            </div>
+
+            <div class="flex gap-2 mb-4 flex-wrap">
+              ${CATEGORIES.map(cat => `
+                <div class="w-12 h-12 rounded-full ${cat.color} ${
+                  currentPlayer.wedges.includes(cat.name) ? 'opacity-100' : 'opacity-20'
+                } flex items-center justify-center text-white font-bold shadow" title="${cat.name}">
+                  ${currentPlayer.wedges.includes(cat.name) ? '✓' : ''}
+                </div>
+              `).join('')}
+            </div>
+
+            <div class="text-sm text-gray-600">
+              ${currentPlayer.wedges.length} / ${CATEGORIES.length} wedges collected
+            </div>
+          </div>
+
+          <div class="bg-white rounded-lg shadow-xl p-8">
+            ${state.currentQuestion.isFinalQuestion ? `
+              <div class="bg-yellow-100 border-4 border-yellow-500 rounded-lg p-4 mb-6 text-center">
+                <p class="text-2xl font-bold text-yellow-800">🏆 FINAL QUESTION 🏆</p>
+                <p class="text-sm text-yellow-700 mt-2">Answer correctly to win the game!</p>
+              </div>
+            ` : ''}
+            
+            <div class="inline-block px-4 py-2 rounded-full ${categoryColor} text-white font-semibold mb-6">
+              ${state.currentQuestion.category}
+            </div>
+
+            <h3 class="text-2xl font-bold mb-8 text-gray-800 leading-relaxed">
+              ${state.currentQuestion.question}
+            </h3>
+
+            <div class="space-y-4 mb-8">
+              ${state.currentQuestion.answers.map((answer, index) => `
+                <button 
+                  onclick="selectAnswer(${index})" 
+                  ${state.showResult ? 'disabled' : ''}
+                  class="w-full p-6 text-left rounded-lg font-semibold text-lg transition ${
+                    state.selectedAnswer === index
+                      ? state.showResult
+                        ? answer.correct ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                        : 'bg-blue-500 text-white'
+                      : state.showResult && answer.correct
+                      ? 'bg-green-200 border-2 border-green-500'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-800'
+                  } ${state.showResult ? 'cursor-not-allowed' : 'cursor-pointer'}">
+                  ${answer.text}
+                </button>
+              `).join('')}
+            </div>
+
+            ${!state.showResult ? `
+              <button 
+                onclick="submitAnswer()" 
+                ${state.selectedAnswer === null ? 'disabled' : ''}
+                class="w-full py-4 rounded-lg font-semibold text-xl transition ${
+                  state.selectedAnswer === null
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-purple-500 hover:bg-purple-600 text-white'
+                }">
+                Submit Answer
+              </button>
+            ` : `
+              <div class="text-center">
+                <p class="text-2xl font-bold mb-6 ${
+                  state.currentQuestion.answers[state.selectedAnswer].correct ? 'text-green-600' : 'text-red-600'
+                }">
+                  ${state.currentQuestion.answers[state.selectedAnswer].correct ? '✓ Correct!' : '✗ Incorrect'}
+                </p>
+                <button onclick="nextTurn()" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-xl transition">
+                  Next Player
+                </button>
+              </div>
+            `}
+          </div>
+
+          <div class="mt-6 bg-white rounded-lg shadow-xl p-6">
+            <h3 class="text-xl font-bold mb-4 text-gray-800">All Players</h3>
+            <div class="space-y-3">
+              ${state.players.map((player, index) => `
+                <div class="p-4 rounded-lg ${index === state.currentPlayerIndex ? 'bg-blue-100 border-2 border-blue-500' : 'bg-gray-50'}">
+                  <div class="flex justify-between items-center">
+                    <span class="font-semibold text-gray-800">${player.name}</span>
+                    <div class="flex gap-1">
+                      ${CATEGORIES.map(cat => `
+                        <div class="w-6 h-6 rounded-full ${cat.color} ${player.wedges.includes(cat.name) ? 'opacity-100' : 'opacity-20'}"></div>
+                      `).join('')}
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderWinner() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-8">
+          <div class="bg-white rounded-lg shadow-2xl p-12 text-center max-w-2xl">
+            <div class="text-8xl mb-6">🏆</div>
+            <h1 class="text-5xl font-bold mb-4 text-gray-800">Victory!</h1>
+            <p class="text-3xl mb-8 text-gray-700">${state.winner.name} Wins!</p>
+            <p class="text-xl text-gray-600 mb-8">Collected all 7 wedges!</p>
+            <button onclick="restartGame()" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-xl transition">
+              Play Again
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    // Event handlers
+    function selectCycle(cycle) {
+      state.selectedCycle = cycle;
+      render();
+    }
+
+    function toggleAdmin() {
+      state.isAdmin = !state.isAdmin;
+      render();
+    }
+
+    function goToAdmin() {
+      state.screen = 'admin';
+      render();
+    }
+
+    function goHome() {
+      state.screen = 'home';
+      render();
+    }
+
+    function setupPlayers(count) {
+      state.playerCount = count;
+      state.playerNames = Array(count).fill('');
+      state.screen = 'names';
+      render();
+    }
+
+    function updatePlayerName(index, value) {
+      state.playerNames[index] = value;
+    }
+
+    function startGame() {
+      const finalNames = state.playerNames.map((name, i) => name.trim() || `Player ${i + 1}`);
+      state.players = finalNames.map(name => ({ name, wedges: [] }));
+      state.screen = 'game';
+      selectRandomQuestion();
+      render();
+    }
+
+    function selectRandomQuestion() {
+      const categoryQuestions = state.questions[state.selectedCycle];
+      if (!categoryQuestions) {
+        alert('No questions available for this cycle. Please add questions first.');
+        state.screen = 'home';
+        render();
+        return;
+      }
+
+      const availableCategories = Object.keys(categoryQuestions).filter(
+        cat => categoryQuestions[cat] && categoryQuestions[cat].length > 0
+      );
+
+      if (availableCategories.length === 0) {
+        alert('No questions available. Please add questions first.');
+        state.screen = 'home';
+        render();
+        return;
+      }
+
+      const randomCategory = availableCategories[Math.floor(Math.random() * availableCategories.length)];
+      const categoryQs = categoryQuestions[randomCategory];
+      const randomQ = categoryQs[Math.floor(Math.random() * categoryQs.length)];
+
+      state.currentQuestion = {
+        ...randomQ,
+        category: randomCategory
+      };
+      state.selectedAnswer = null;
+      state.showResult = false;
+    }
+
+    function selectAnswer(index) {
+      if (state.showResult) return;
+      state.selectedAnswer = index;
+      render();
+    }
+
+    function submitAnswer() {
+      if (state.selectedAnswer === null) return;
+
+      const correct = state.currentQuestion.answers[state.selectedAnswer].correct;
+      state.showResult = true;
+
+      if (correct) {
+        // Check if this is the final question
+        if (state.currentQuestion.isFinalQuestion) {
+          // They answered the final question correctly - they win!
+          state.winner = state.finalQuestionPlayer;
+          render();
+          return;
+        }
+
+        // Regular question - check for wedge collection
+        const currentPlayer = state.players[state.currentPlayerIndex];
+        if (!currentPlayer.wedges.includes(state.currentQuestion.category)) {
+          currentPlayer.wedges.push(state.currentQuestion.category);
+
+          // Check if they have all 7 wedges
+          if (currentPlayer.wedges.length === CATEGORIES.length) {
+            // They just got their 7th wedge - need to ask final question
+            state.needsFinalQuestion = true;
+            state.finalQuestionPlayer = currentPlayer;
+          }
+        }
+      } else {
+        // If they got the final question wrong, reset the final question flag
+        if (state.currentQuestion.isFinalQuestion) {
+          state.needsFinalQuestion = false;
+          state.finalQuestionPlayer = null;
+        }
+      }
+      render();
+    }
+
+    function nextTurn() {
+      // If there's a winner, just render to show the winner screen
+      if (state.winner) {
+        render();
+        return;
+      }
+
+      // Check if we need to show the final question category selection
+      if (state.needsFinalQuestion && !state.currentQuestion.isFinalQuestion) {
+        state.screen = 'selectFinalCategory';
+        render();
+        return;
+      }
+
+      state.currentPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+      selectRandomQuestion();
+      render();
+    }
+
+    function selectFinalCategory(category) {
+      // Select a question from the chosen category
+      const categoryQuestions = state.questions[state.selectedCycle];
+      if (!categoryQuestions || !categoryQuestions[category] || categoryQuestions[category].length === 0) {
+        alert('No questions available in this category. Please choose another.');
+        return;
+      }
+
+      const categoryQs = categoryQuestions[category];
+      const randomQ = categoryQs[Math.floor(Math.random() * categoryQs.length)];
+
+      state.currentQuestion = {
+        ...randomQ,
+        category: category,
+        isFinalQuestion: true
+      };
+      state.selectedAnswer = null;
+      state.showResult = false;
+      state.screen = 'game';
+      render();
+    }
+
+    function restartGame() {
+      state.players = [];
+      state.currentPlayerIndex = 0;
+      state.currentQuestion = null;
+      state.winner = null;
+      state.playerCount = null;
+      state.playerNames = [];
+      state.needsFinalQuestion = false;
+      state.finalQuestionPlayer = null;
+      state.screen = 'home';
+      render();
+    }
+
+    function changeAdminCycle(value) {
+      state.adminCycle = value;
+      state.showQuestionList = false;
+      render();
+    }
+
+    function changeAdminCategory(value) {
+      state.adminCategory = value;
+      state.showQuestionList = false;
+      render();
+    }
+
+    function updateNewQuestion(field, value) {
+      state.newQuestion[field] = value;
+    }
+
+    async function generateWrongAnswers() {
+      // Get current values from DOM fields
+      const question = document.getElementById('question-field')?.value || '';
+      const correct = document.getElementById('correct-field')?.value || '';
+      
+      if (!question || !correct) {
+        alert('Please enter the question and correct answer first');
+        return;
+      }
+
+      state.generatingSuggestions = true;
+      const btn = document.getElementById('generate-btn');
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('opacity-50', 'cursor-not-allowed');
+        btn.textContent = 'Generating...';
+      }
+
+      try {
+        const response = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-20250514",
+            max_tokens: 1000,
+            messages: [{
+              role: "user",
+              content: `Generate 3 plausible but incorrect answers for this Classical Conversations question.
+
+Question: ${question}
+Correct Answer: ${correct}
+Category: ${state.adminCategory}
+
+CRITICAL: Return ONLY a valid JSON array with 3 strings. No explanation, no markdown, no other text. Just the array.
+
+Example format:
+["wrong answer 1", "wrong answer 2", "wrong answer 3"]`
+            }]
+          })
+        });
+
+        const data = await response.json();
+        const text = data.content.find(c => c.type === "text")?.text || "";
+        
+        // More aggressive cleaning
+        let cleaned = text.replace(/```json|```/g, "").trim();
+        
+        // Try to extract JSON array if there's extra text
+        const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+        if (arrayMatch) {
+          cleaned = arrayMatch[0];
+        }
+        
+        const wrongAnswers = JSON.parse(cleaned);
+
+        state.newQuestion.wrong1 = wrongAnswers[0] || '';
+        state.newQuestion.wrong2 = wrongAnswers[1] || '';
+        state.newQuestion.wrong3 = wrongAnswers[2] || '';
+
+        // Update the DOM fields directly
+        document.getElementById('wrong1-field').value = state.newQuestion.wrong1;
+        document.getElementById('wrong2-field').value = state.newQuestion.wrong2;
+        document.getElementById('wrong3-field').value = state.newQuestion.wrong3;
+
+        alert('Wrong answers generated successfully!');
+      } catch (error) {
+        console.error('Error generating suggestions:', error);
+        alert('Error generating suggestions: ' + error.message);
+      } finally {
+        state.generatingSuggestions = false;
+        if (btn) {
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'cursor-not-allowed');
+          btn.textContent = '✨ Generate Wrong Answer Suggestions';
+        }
+      }
+    }
+
+    async function addQuestion() {
+      // Get values directly from DOM to ensure we have the latest
+      const question = document.getElementById('question-field')?.value || '';
+      const correct = document.getElementById('correct-field')?.value || '';
+      const wrong1 = document.getElementById('wrong1-field')?.value || '';
+      const wrong2 = document.getElementById('wrong2-field')?.value || '';
+      const wrong3 = document.getElementById('wrong3-field')?.value || '';
+
+      // Update state with current values
+      state.newQuestion.question = question;
+      state.newQuestion.correct = correct;
+      state.newQuestion.wrong1 = wrong1;
+      state.newQuestion.wrong2 = wrong2;
+      state.newQuestion.wrong3 = wrong3;
+
+      if (!question || !correct || !wrong1 || !wrong2 || !wrong3) {
+        alert('Please fill in all fields:\n' + 
+              (question ? '✓' : '✗') + ' Question\n' +
+              (correct ? '✓' : '✗') + ' Correct Answer\n' +
+              (wrong1 ? '✓' : '✗') + ' Wrong Answer 1\n' +
+              (wrong2 ? '✓' : '✗') + ' Wrong Answer 2\n' +
+              (wrong3 ? '✓' : '✗') + ' Wrong Answer 3');
+        return;
+      }
+
+      const updatedQuestions = { ...state.questions };
+      if (!updatedQuestions[state.adminCycle]) {
+        updatedQuestions[state.adminCycle] = {};
+      }
+      if (!updatedQuestions[state.adminCycle][state.adminCategory]) {
+        updatedQuestions[state.adminCycle][state.adminCategory] = [];
+      }
+
+      const questionData = {
+        question: question,
+        answers: [
+          { text: correct, correct: true },
+          { text: wrong1, correct: false },
+          { text: wrong2, correct: false },
+          { text: wrong3, correct: false }
+        ].sort(() => Math.random() - 0.5)
+      };
+
+      if (state.editingIndex !== null) {
+        updatedQuestions[state.adminCycle][state.adminCategory][state.editingIndex] = questionData;
+        state.editingIndex = null;
+        alert('Question updated!');
+      } else {
+        updatedQuestions[state.adminCycle][state.adminCategory].push(questionData);
+        alert('Question added!');
+      }
+
+      await saveQuestions(updatedQuestions);
+      state.newQuestion = { question: '', correct: '', wrong1: '', wrong2: '', wrong3: '' };
+      render();
+    }
+
+    function editQuestion(index) {
+      const q = state.questions[state.adminCycle][state.adminCategory][index];
+      const correctAnswer = q.answers.find(a => a.correct);
+      const wrongAnswers = q.answers.filter(a => !a.correct);
+      
+      state.newQuestion = {
+        question: q.question,
+        correct: correctAnswer.text,
+        wrong1: wrongAnswers[0]?.text || '',
+        wrong2: wrongAnswers[1]?.text || '',
+        wrong3: wrongAnswers[2]?.text || ''
+      };
+      state.editingIndex = index;
+      state.showQuestionList = false;
+      render();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteQuestion(index) {
+      if (!confirm('Are you sure you want to delete this question?')) return;
+      
+      const updatedQuestions = { ...state.questions };
+      updatedQuestions[state.adminCycle][state.adminCategory].splice(index, 1);
+      await saveQuestions(updatedQuestions);
+      render();
+    }
+
+    function cancelEdit() {
+      state.editingIndex = null;
+      state.newQuestion = { question: '', correct: '', wrong1: '', wrong2: '', wrong3: '' };
+      render();
+    }
+
+    function toggleQuestionList() {
+      state.showQuestionList = !state.showQuestionList;
+      render();
+    }
+
+    function exportQuestions() {
+      const dataStr = JSON.stringify(state.questions, null, 2);
+      
+      // Try the download method first
+      try {
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'cc-questions.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        // If download is blocked, show the JSON in a copyable text area
+        const modal = document.createElement('div');
+        modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px;';
+        modal.innerHTML = `
+          <div style="background:white;padding:30px;border-radius:10px;max-width:800px;width:100%;max-height:80vh;overflow:auto;">
+            <h2 style="margin-top:0;color:#333;">Export Questions - Copy This Text</h2>
+            <p style="color:#666;margin-bottom:20px;">Since automatic download is blocked, copy this text and save it as a .json file:</p>
+            <textarea id="export-text" style="width:100%;height:400px;font-family:monospace;font-size:12px;padding:10px;border:2px solid #ddd;border-radius:5px;">${dataStr}</textarea>
+            <div style="margin-top:20px;display:flex;gap:10px;">
+              <button onclick="document.getElementById('export-text').select();document.execCommand('copy');alert('Copied to clipboard!');" style="flex:1;padding:15px;background:#3b82f6;color:white;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">
+                Copy to Clipboard
+              </button>
+              <button onclick="this.parentElement.parentElement.parentElement.remove();" style="flex:1;padding:15px;background:#6b7280;color:white;border:none;border-radius:5px;font-weight:bold;cursor:pointer;">
+                Close
+              </button>
+            </div>
+          </div>
+        `;
+        document.body.appendChild(modal);
+      }
+    }
+
+    function importQuestions(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const importedQuestions = JSON.parse(e.target.result);
+          await saveQuestions(importedQuestions);
+          alert('Questions imported successfully!');
+          render();
+        } catch (error) {
+          alert('Error importing questions. Please make sure the file is valid.');
+          console.error('Import error:', error);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // Start the app
+    init();
+  </script>
+</body>
+</html>
