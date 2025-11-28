@@ -49,7 +49,7 @@
     async function init() {
       await loadQuestions();
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('admin') === 'true' || !window.location.hostname || window.location.hostname === 'localhost') {
+      if (urlParams.get('admin') === 'true') {
         state.isAdmin = true;
       }
       render();
@@ -121,21 +121,9 @@
             </div>
           </div>
 
-          <button onclick="goToAdmin()" class="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-lg transition mb-4">
+          <button onclick="goToAdmin()" class="w-full py-4 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-lg transition">
             ⚙️ Manage Questions
           </button>
-
-          <button onclick="toggleAdmin()" class="w-full py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold text-sm transition">
-            ${state.isAdmin ? '🔓 Admin Mode: ON' : '🔒 Admin Mode: OFF'} (Click to Toggle)
-          </button>
-
-          ${!state.isAdmin ? `
-            <div class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <p class="text-sm text-blue-800 text-center">
-                <strong>For Published Version:</strong> Add <code class="bg-blue-100 px-2 py-1 rounded">?admin=true</code> to the URL
-              </p>
-            </div>
-          ` : ''}
         </div>
       `;
     }
@@ -438,10 +426,12 @@
                 <p class="text-2xl font-bold mb-6 ${
                   state.currentQuestion.answers[state.selectedAnswer].correct ? 'text-green-600' : 'text-red-600'
                 }">
-                  ${state.currentQuestion.answers[state.selectedAnswer].correct ? '✓ Correct!' : '✗ Incorrect'}
+                  ${state.currentQuestion.answers[state.selectedAnswer].correct 
+                    ? (state.currentQuestion.isFinalQuestion ? '✓ Correct! Victory is yours!' : '✓ Correct!') 
+                    : (state.currentQuestion.isFinalQuestion ? '✗ Incorrect - Play continues!' : '✗ Incorrect')}
                 </p>
                 <button onclick="nextTurn()" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-xl transition">
-                  Next Player
+                  ${state.currentQuestion.isFinalQuestion && state.currentQuestion.answers[state.selectedAnswer].correct ? 'See Winner!' : 'Next Player'}
                 </button>
               </div>
             `}
@@ -475,7 +465,7 @@
             <div class="text-8xl mb-6">🏆</div>
             <h1 class="text-5xl font-bold mb-4 text-gray-800">Victory!</h1>
             <p class="text-3xl mb-8 text-gray-700">${state.winner.name} Wins!</p>
-            <p class="text-xl text-gray-600 mb-8">Collected all 7 wedges!</p>
+            <p class="text-xl text-gray-600 mb-8">Collected all 7 wedges and answered the final question!</p>
             <button onclick="restartGame()" class="px-8 py-4 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-xl transition">
               Play Again
             </button>
