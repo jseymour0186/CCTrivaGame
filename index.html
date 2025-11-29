@@ -238,15 +238,23 @@
               >${state.newQuestion.correct}</textarea>
             </div>
 
-            <div class="mb-6">
-              <button 
-                id="generate-btn"
-                onclick="generateWrongAnswers()" 
-                class="w-full py-3 rounded-lg font-semibold transition bg-purple-500 hover:bg-purple-600 text-white">
-                ${state.generatingSuggestions ? 'Generating...' : '✨ Generate Wrong Answer Suggestions'}
-              </button>
-              <p class="text-xs text-gray-500 mt-2 text-center">AI will suggest 3 plausible wrong answers</p>
-            </div>
+            ${window.location.hostname === '' || window.location.protocol === 'blob:' ? `
+              <div class="mb-6">
+                <button 
+                  id="generate-btn"
+                  onclick="generateWrongAnswers()" 
+                  class="w-full py-3 rounded-lg font-semibold transition bg-purple-500 hover:bg-purple-600 text-white">
+                  ${state.generatingSuggestions ? 'Generating...' : '✨ Generate Wrong Answer Suggestions'}
+                </button>
+                <p class="text-xs text-gray-500 mt-2 text-center">AI will suggest 3 plausible wrong answers</p>
+              </div>
+            ` : `
+              <div class="mb-6 p-4 bg-gray-100 rounded-lg border border-gray-300">
+                <p class="text-sm text-gray-600 text-center">
+                  💡 <strong>Tip:</strong> AI answer generation only works in the Claude artifact. Enter wrong answers manually here, or create questions in the artifact and import them.
+                </p>
+              </div>
+            `}
 
             <div class="grid grid-cols-1 gap-4 mb-6">
               ${['wrong1', 'wrong2', 'wrong3'].map((field, i) => `
