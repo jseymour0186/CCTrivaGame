@@ -10,6 +10,9 @@
   <div id="app"></div>
 
   <script>
+    // ADMIN PASSWORD - Change this to your desired password
+    const ADMIN_PASSWORD = "CCTrivia2024";
+
     const CATEGORIES = [
       { name: 'History', color: 'bg-orange-500', textColor: 'text-orange-500' },
       { name: 'Geography', color: 'bg-green-500', textColor: 'text-green-500' },
@@ -50,7 +53,14 @@
       await loadQuestions();
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('admin') === 'true') {
-        state.isAdmin = true;
+        // Prompt for password
+        const enteredPassword = prompt('Enter admin password:');
+        if (enteredPassword === ADMIN_PASSWORD) {
+          state.isAdmin = true;
+          alert('Admin access granted!');
+        } else if (enteredPassword !== null) {
+          alert('Incorrect password. Admin access denied.');
+        }
       }
       render();
     }
@@ -198,6 +208,13 @@
                 Back
               </button>
             </div>
+          </div>
+
+          <div class="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+            <p class="text-sm text-blue-800">
+              <strong>🔒 Admin Password:</strong> <code class="bg-blue-100 px-2 py-1 rounded">${ADMIN_PASSWORD}</code>
+              <br><span class="text-xs">To change the password, edit the ADMIN_PASSWORD variable at the top of the code.</span>
+            </p>
           </div>
 
           <div class="bg-white rounded-lg shadow-xl p-8">
