@@ -36,6 +36,7 @@
       showResult: false,
       winner: null,
       isAdmin: false,
+      passwordEntered: false,
       playerCount: null,
       playerNames: [],
       adminCycle: 'Cycle 1',
@@ -52,15 +53,10 @@
     async function init() {
       await loadQuestions();
       const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get('admin') === 'true') {
-        // Prompt for password
-        const enteredPassword = prompt('Enter admin password:');
-        if (enteredPassword === ADMIN_PASSWORD) {
-          state.isAdmin = true;
-          alert('Admin access granted!');
-        } else if (enteredPassword !== null) {
-          alert('Incorrect password. Admin access denied.');
-        }
+      if (urlParams.get('admin') === 'true' && !state.passwordEntered) {
+        state.screen = 'password';
+        render();
+        return;
       }
       render();
     }
@@ -91,6 +87,8 @@
       // Check for winner first
       if (state.winner) {
         app.innerHTML = renderWinner();
+      } else if (state.screen === 'password') {
+        app.innerHTML = renderPasswordScreen();
       } else if (state.screen === 'home') {
         app.innerHTML = renderHome();
       } else if (state.screen === 'names') {
@@ -101,6 +99,59 @@
         app.innerHTML = renderSelectFinalCategory();
       } else if (state.screen === 'game') {
         app.innerHTML = renderGame();
+      }
+    }
+
+    function renderPasswordScreen() {
+      return `
+        <div class="min-h-screen flex items-center justify-center p-8">
+          <div class="bg-white rounded-lg shadow-2xl p-12 text-center max-w-md">
+            <div class="text-6xl mb-6">🔒</div>
+            <h1 class="text-3xl font-bold mb-4 text-gray-800">Admin Access</h1>
+            <p class="text-gray-600 mb-6">Enter the admin password to continue</p>
+            
+            <input 
+              type="password" 
+              id="password-input"
+              placeholder="Enter password"
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg mb-4 text-center text-lg"
+              onkeypress="if(event.key === 'Enter') checkPassword()"
+            />
+            
+            <button 
+              onclick="checkPassword()" 
+              class="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-semibold text-lg transition mb-3"
+            >
+              Submit
+            </button>
+            
+            <button 
+              onclick="goHome()" 
+              class="w-full py-3 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-lg font-semibold transition"
+            >
+              Cancel
+            </button>
+            
+            <p id="error-message" class="text-red-600 mt-4 text-sm hidden"></p>
+          </div>
+        </div>
+      `;
+    }
+
+    function checkPassword() {
+      const input = document.getElementById('password-input');
+      const errorMsg = document.getElementById('error-message');
+      
+      if (input.value === ADMIN_PASSWORD) {
+        state.isAdmin = true;
+        state.passwordEntered = true;
+        state.screen = 'admin';
+        render();
+      } else {
+        errorMsg.textContent = '❌ Incorrect password. Please try again.';
+        errorMsg.classList.remove('hidden');
+        input.value = '';
+        input.focus();
       }
     }
 
